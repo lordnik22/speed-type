@@ -519,7 +519,7 @@ CALLBACK is called when the setup process has been completed."
       (when replay-fn
         (setq speed-type--replay-fn replay-fn))
       (insert text)
-      (fill-region (point-min) (point-max))
+      (fill-region (point-min) (point-max) 'none t)
       (set-buffer-modified-p nil)
       (switch-to-buffer buf)
       (goto-char 0)
@@ -553,6 +553,7 @@ CALLBACK is called when the setup process has been completed."
 
 (defun speed-type--kill-buffer-hook ()
   "Hook when speed-type buffer is killed."
+  (when speed-type--extra-words-animation-time (cancel-timer speed-type--extra-words-animation-time))
   (when speed-type--content-buffer
     (let ((buf speed-type--content-buffer))
       (setq speed-type--content-buffer nil)
@@ -600,7 +601,7 @@ to (point-min) and (point-max)"
       (setq continue (re-search-backward (sentence-end) (mark) t))
       (when continue (setq fwd t)))
     (when fwd (forward-char)))
-  (unless (derived-mode-p 'prog-mode) (fill-region (region-beginning) (region-end)))
+  (unless (derived-mode-p 'prog-mode) (fill-region (region-beginning) (region-end) 'none t))
   (buffer-substring-no-properties (region-beginning) (region-end)))
 
 (defun speed-type--setup-code
@@ -677,7 +678,10 @@ been completed."
     (save-excursion
       (goto-char (point-min))
       (beginning-of-line (+ 1 (random limit)))
-      (car (split-string (or (thing-at-point 'line) "") separator)))))
+      (let ((seperated-things (split-string (or (thing-at-point 'line) "") separator)))
+	(dotimes (_  (random (length seperated-things)))
+	  (setq seperated-things (cdr seperated-things)))
+	(car seperated-things)))))
 
 (defun speed-type--get-random-word (content-buffer limit)
   "Get random word in CONTENT-BUFFER.
@@ -694,7 +698,7 @@ LIMIT is supplied to the random-function."
 	     speed-type--add-extra-word-content-fn)
     (let ((words '()))
       (dotimes (_ speed-type-add-extra-words-on-mistake)
-	(let ((word (funcall speed-type--add-extra-word-content-fn)))
+	(let ((word (string-trim (funcall speed-type--add-extra-word-content-fn))))
 	  (if (string-empty-p word)
 	      (message "You got lucky! Extra word function resulted in empty string.")
 	    (push word words))))
@@ -715,7 +719,7 @@ LIMIT is supplied to the random-function."
       (setq speed-type--extra-words-animation-time nil)
       (when speed-type--extra-words-queue
 	  (insert (mapconcat 'identity speed-type--extra-words-queue))
-	  (fill-region (point-min) (point-max))))))
+	  (fill-region (point-min) (point-max) 'none t)))))
 
 (defun speed-type-animate-extra-word-inseration (buf)
   "Add words of punishment-lines in animated fashion to ‘BUF’."
@@ -725,10 +729,8 @@ LIMIT is supplied to the random-function."
       (if speed-type--extra-words-queue
 	  (let ((token (pop speed-type--extra-words-queue)))
 	    (goto-char (point-max))
-	    (when (not (string= token "\n"))
-	      (end-of-line 1))
 	    (insert token))
-	(fill-region (point) (point-max))
+	(fill-region (point-min) (point-max) 'none t)
 	(cancel-timer speed-type--extra-words-animation-time)
 	(setq speed-type--extra-words-animation-time nil))
       (add-hook 'after-change-functions 'speed-type--change nil t))))
@@ -766,7 +768,7 @@ LIMIT is supplied to the random-function."
 		 (while (< (buffer-size) char-length)
 		   (insert (speed-type--get-random-word buf n))
                    (insert " "))
-		 (fill-region (point-min) (point-max))
+		 (fill-region (point-min) (point-max) 'none t)
 		 (if speed-type-wordlist-transform
                      (funcall speed-type-wordlist-transform (buffer-string))
                    (buffer-string))))
