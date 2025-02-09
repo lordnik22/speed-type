@@ -502,15 +502,15 @@ CALLBACK is called when the setup process has been completed."
       (set-buffer buf)
       (speed-type-mode)
       (buffer-face-set 'speed-type-default)
-      (setq speed-type--orig-text text)
-      (setq speed-type--mod-str (make-string len 0))
-      (setq speed-type--remaining len)
-      (setq speed-type--author author)
-      (setq speed-type--title title)
-      (setq speed-type--lang lang)
-      (setq speed-type--n-words n-words)
-      (setq speed-type--add-extra-word-content-fn add-extra-word-content-fn)
-      (setq speed-type--go-next-fn go-next-fn)
+      (setq speed-type--orig-text text
+	    speed-type--mod-str (make-string len 0)
+	    speed-type--remaining len
+	    speed-type--author author
+	    speed-type--title title
+	    speed-type--lang lang
+	    speed-type--n-words n-words
+	    speed-type--add-extra-word-content-fn add-extra-word-content-fn
+	    speed-type--go-next-fn go-next-fn)
       (when content-buffer
 	(setq speed-type--content-buffer content-buffer)
 	(setq-local speed-type--buffer buf))
@@ -703,10 +703,10 @@ LIMIT is supplied to the random-function."
 	      (message "You got lucky! Extra word function resulted in empty string.")
 	    (push word words))))
       (let ((words-as-string (concat " " (string-trim (mapconcat 'identity (nreverse words) " ")))))
-	(setq speed-type--extra-words-queue (append speed-type--extra-words-queue (split-string words-as-string "" t)))
-	(setq speed-type--orig-text (concat speed-type--orig-text words-as-string))
-	(setq speed-type--mod-str (concat speed-type--mod-str (make-string (+ 1 (length words-as-string)) 0)))
-	(setq speed-type--remaining (+ (length words-as-string) speed-type--remaining))))
+	(setq speed-type--extra-words-queue (append speed-type--extra-words-queue (split-string words-as-string "" t))
+	      speed-type--orig-text (concat speed-type--orig-text words-as-string)
+	      speed-type--mod-str (concat speed-type--mod-str (make-string (+ 1 (length words-as-string)) 0))
+	      speed-type--remaining (+ (length words-as-string) speed-type--remaining))))
     (when (not (timerp speed-type--extra-words-animation-time))
       (setq speed-type--extra-words-animation-time (run-at-time nil 0.01 'speed-type-animate-extra-word-inseration speed-type--buffer)))))
 
