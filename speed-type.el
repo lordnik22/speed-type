@@ -847,11 +847,11 @@ will be used.  Else some text will be picked randomly."
 	    (derived-mode-p 'prog-mode))
           (speed-type--code-with-highlighting buf
 				    text
-				    :author (user-full-name)
-				    :title (buffer-name)
-                                    :syntax-table (syntax-table)
-                                    :font-lock-df font-lock-defaults
-                                    :go-next-fn go-next-fn)
+				    (user-full-name)
+				    (buffer-name)
+                                    (syntax-table)
+                                    font-lock-defaults
+                                    go-next-fn)
         (speed-type--setup buf
 		 text
 		 :author (user-full-name)
