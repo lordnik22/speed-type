@@ -518,7 +518,8 @@ CALLBACK is called when the setup process has been completed."
       (when replay-fn
         (setq speed-type--replay-fn replay-fn))
       (insert text)
-      (fill-region (point-min) (point-max) 'none t)
+      (unless (with-current-buffer speed-type-content-buffer-name (derived-mode-p 'prog-mode))
+	(fill-region (point-min) (point-max) 'none t))
       (set-buffer-modified-p nil)
       (switch-to-buffer buf)
       (goto-char 0)
@@ -615,8 +616,8 @@ For code highlighting, a syntax table can be specified by SYNTAX-TABLE,
 and font lock defaults by FONT-LOCK-DF."
   (cl-flet ((callback ()
                       (electric-pair-mode -1)
-                      (local-set-key (kbd "TAB") 'speed-type-code-tab)
-                      (local-set-key (kbd "RET") 'speed-type-code-ret)
+                      (local-set-key (kbd "TAB") 'speed-type--code-tab)
+                      (local-set-key (kbd "RET") 'speed-type--code-ret)
                       (when syntax-table (set-syntax-table syntax-table))
                       (when font-lock-df
                         (let ((font-lock-defaults font-lock-df))
@@ -726,18 +727,20 @@ LIMIT is supplied to the random-function."
       (setq speed-type--extra-words-animation-time nil)
       (when speed-type--extra-words-queue
 	(insert (mapconcat 'identity speed-type--extra-words-queue))
-	(fill-region (point-min) (point-max) 'none t)))))
+	(unless (with-current-buffer speed-type-content-buffer-name (derived-mode-p 'prog-mode)
+				     (fill-region (point-min) (point-max) 'none t)))))))
 
 (defun speed-type-animate-extra-word-inseration (buf)
   "Add words of punishment-lines in animated fashion to ‘BUF’."
   (save-excursion
     (with-current-buffer buf
       (remove-hook 'after-change-functions 'speed-type--change t)
-      (if speed-type--extra-words-queue
+      (if (and speed-type--extra-words-queue)
 	  (let ((token (pop speed-type--extra-words-queue)))
 	    (goto-char (point-max))
 	    (insert token))
-	(fill-region (point-min) (point-max) 'none t)
+	(unless (with-current-buffer speed-type-content-buffer-name (derived-mode-p 'prog-mode))
+	  (fill-region (point-min) (point-max) 'none t))
 	(cancel-timer speed-type--extra-words-animation-time)
 	(setq speed-type--extra-words-animation-time nil))
       (add-hook 'after-change-functions 'speed-type--change nil t))))
@@ -754,7 +757,7 @@ LIMIT is supplied to the random-function."
   "A command to be mapped to RET when speed typing code."
   (interactive)
   (when (= (point) (line-end-position))
-    (newline) (move-beginning-of-line nil) (speed-type-code-tab)))
+    (newline) (move-beginning-of-line nil) (speed-type--code-tab)))
 
 ;;;###autoload
 (defun speed-type-top-x (n)
