@@ -513,12 +513,10 @@ CALLBACK is called when the setup process has been completed."
       (when content-buffer
 	(setq speed-type--content-buffer content-buffer)
 	(setq-local speed-type--buffer buf))
-      (with-current-buffer speed-type--content-buffer
-	(setq-local speed-type--buffer buf))
-      (when replay-fn
-        (setq speed-type--replay-fn replay-fn))
+      (with-current-buffer speed-type--content-buffer (setq-local speed-type--buffer buf))
+      (when replay-fn (setq speed-type--replay-fn replay-fn))
       (insert text)
-      (unless (with-current-buffer speed-type-content-buffer-name (derived-mode-p 'prog-mode))
+      (unless (with-current-buffer speed-type--content-buffer (derived-mode-p 'prog-mode))
 	(fill-region (point-min) (point-max) 'none t))
       (set-buffer-modified-p nil)
       (switch-to-buffer buf)
@@ -727,7 +725,7 @@ LIMIT is supplied to the random-function."
       (setq speed-type--extra-words-animation-time nil)
       (when speed-type--extra-words-queue
 	(insert (mapconcat 'identity speed-type--extra-words-queue))
-	(unless (with-current-buffer speed-type-content-buffer-name (derived-mode-p 'prog-mode)
+	(unless (with-current-buffer speed-type--content-buffer (derived-mode-p 'prog-mode)
 				     (fill-region (point-min) (point-max) 'none t)))))))
 
 (defun speed-type-animate-extra-word-inseration (buf)
@@ -739,7 +737,7 @@ LIMIT is supplied to the random-function."
 	  (let ((token (pop speed-type--extra-words-queue)))
 	    (goto-char (point-max))
 	    (insert token))
-	(unless (with-current-buffer speed-type-content-buffer-name (derived-mode-p 'prog-mode))
+	(unless (with-current-buffer speed-type--content-buffer (derived-mode-p 'prog-mode))
 	  (fill-region (point-min) (point-max) 'none t))
 	(cancel-timer speed-type--extra-words-animation-time)
 	(setq speed-type--extra-words-animation-time nil))
@@ -816,8 +814,7 @@ LIMIT is supplied to the random-function."
 			(when start (int-to-string start))
 			(when end (concat ":" (int-to-string end)))))
          (text (with-current-buffer buf (buffer-substring-no-properties start end))))
-    (if (with-current-buffer buf
-	  (derived-mode-p 'prog-mode))
+    (if (with-current-buffer buf (derived-mode-p 'prog-mode))
         (speed-type--code-with-highlighting buf
 				  text
 				  title
