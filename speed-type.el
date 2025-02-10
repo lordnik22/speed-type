@@ -35,7 +35,6 @@
 ;; stats (WPM, CPM, accuracy) while you are typing.
 
 ;;; Code:
-
 (require 'cl-lib)
 (require 'compat)
 (require 'url)
@@ -605,7 +604,7 @@ to (point-min) and (point-max)"
   (buffer-substring-no-properties (region-beginning) (region-end)))
 
 (defun speed-type--setup-code
-    (content-buffer text &optional replay-fn go-next-fn syntax-table font-lock-df)
+    (content-buffer text title author &optional replay-fn go-next-fn syntax-table font-lock-df)
   "Speed type the code snippet TEXT.
 
 If specified, call REPLAY-FN after completion of a speed type session
@@ -625,12 +624,13 @@ and font lock defaults by FONT-LOCK-DF."
                           (ignore-errors (font-lock-ensure))))))
     (speed-type--setup content-buffer
 	     text
+	     :author author
+	     :title title
 	     :replay-fn replay-fn
              :go-next-fn go-next-fn
              :callback #'callback)))
 
-(defun speed-type--code-with-highlighting
-    (content-buffer text &optional syntax-table font-lock-df go-next-fn)
+(defun speed-type--code-with-highlighting (content-buffer text title author &optional syntax-table font-lock-df go-next-fn)
   "Speed type TEXT with syntax highlighting.
 
 Syntax highlighting data is given by SYNTAX-TABLE and
@@ -640,8 +640,12 @@ If GO-NEXT-FN is specified, call it when speed typing the text has
 been completed."
   (speed-type--setup-code content-buffer
 		text
+		title
+		author
 		#'speed-type--get-replay-fn
-		go-next-fn syntax-table font-lock-df))
+		go-next-fn
+		syntax-table
+		font-lock-df))
 
 (defun speed-type--get-replay-fn ()
   "Return a replay function which will use GO-NEXT-FN after completion."
@@ -651,10 +655,13 @@ been completed."
       (speed-type--code-with-highlighting
        speed-type--content-buffer
        speed-type--orig-text
+       speed-type--title
+       speed-type--author
        (with-current-buffer speed-type--content-buffer (syntax-table))
        (with-current-buffer speed-type--content-buffer font-lock-defaults)
        speed-type--go-next-fn)
     (speed-type--setup speed-type--content-buffer
+	     speed-type--title
 	     speed-type--orig-text
 	     :lang speed-type--lang
 	     :author speed-type--author
@@ -718,8 +725,8 @@ LIMIT is supplied to the random-function."
       (when speed-type--extra-words-animation-time (cancel-timer speed-type--extra-words-animation-time))
       (setq speed-type--extra-words-animation-time nil)
       (when speed-type--extra-words-queue
-	  (insert (mapconcat 'identity speed-type--extra-words-queue))
-	  (fill-region (point-min) (point-max) 'none t)))))
+	(insert (mapconcat 'identity speed-type--extra-words-queue))
+	(fill-region (point-min) (point-max) 'none t)))))
 
 (defun speed-type-animate-extra-word-inseration (buf)
   "Add words of punishment-lines in animated fashion to ‘BUF’."
@@ -777,6 +784,7 @@ LIMIT is supplied to the random-function."
     (speed-type--setup buf
 	     text
              :title title
+	     :author "Uni Leipzig"
              :lang lang
              :n-words n
 	     :add-extra-word-content-fn add-extra-word-content-fn
@@ -800,16 +808,23 @@ LIMIT is supplied to the random-function."
   "Open copy of [START,END] in a new buffer to speed type the text."
   (interactive "r")
   (let* ((buf (speed-type-prepare-content-buffer-from-buffer (current-buffer)))
-         (text (with-current-buffer buf
-		 (buffer-substring-no-properties start end))))
+	 (title (concat (buffer-name)
+			(when (and start end) " Region: ")
+			(when start (int-to-string start))
+			(when end (concat ":" (int-to-string end)))))
+         (text (with-current-buffer buf (buffer-substring-no-properties start end))))
     (if (with-current-buffer buf
 	  (derived-mode-p 'prog-mode))
         (speed-type--code-with-highlighting buf
 				  text
-                                  (syntax-table)
-                                  font-lock-defaults)
+				  title
+				  (user-full-name)
+				  (syntax-table)
+				  font-lock-defaults)
       (speed-type--setup buf
 	       (buffer-substring-no-properties start end)
+	       :author (user-full-name)
+	       :title title
 	       :replay-fn #'speed-type--get-replay-fn))))
 
 ;;;###autoload
@@ -832,11 +847,15 @@ will be used.  Else some text will be picked randomly."
 	    (derived-mode-p 'prog-mode))
           (speed-type--code-with-highlighting buf
 				    text
-                                    (syntax-table)
-                                    font-lock-defaults
-                                    go-next-fn)
+				    :author (user-full-name)
+				    :title (buffer-name)
+                                    :syntax-table (syntax-table)
+                                    :font-lock-df font-lock-defaults
+                                    :go-next-fn go-next-fn)
         (speed-type--setup buf
 		 text
+		 :author (user-full-name)
+		 :title (buffer-name)
 		 :add-extra-word-content-fn (lambda () (speed-type--get-separated-thing-at-random-line buf line-count " "))
 		 :go-next-fn go-next-fn)))))
 
@@ -877,5 +896,4 @@ will be used.  Else some text will be picked randomly."
              :go-next-fn #'speed-type-text)))
 
 (provide 'speed-type)
-
 ;;; speed-type.el ends here
