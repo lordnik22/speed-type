@@ -44,6 +44,7 @@ Main differences:
 - some bugfixes and more consistent state-handling
 - deactivate keys which can break a typing session (e.g. fill-paragraph)
 - refactored code at some places
+- save statistic to file and calculate median
 
 ## Running speed-type
 

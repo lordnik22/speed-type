@@ -120,6 +120,19 @@ be complete when these extra words are typed too."
   :group 'speed-type
   :type 'integer)
 
+(defcustom speed-type-save-statistic-option 'never
+  "Save the stats for the play or not."
+  :group 'speed-type
+  :type '(choice (const :tag "Always" 'always)
+		 (const :tag "Never" 'never)
+		 (const :tag "Ask" 'ask)))
+
+(defcustom speed-type-statistic-filename (concat speed-type-gb-dir "/" "speed-type-statistic.el")
+  "Name of file for general stats."
+  :group 'speed-type
+  :type 'string)
+
+
 (defface speed-type-default
   '()
   "Default face for `speed-type'."
@@ -160,7 +173,7 @@ Total errors: %d
 
 (defvar speed-type--completed-keymap
   (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "q") 'kill-current-buffer)
+    (define-key map (kbd "q") 'speed-type--quit)
     (define-key map (kbd "r") 'speed-type--replay)
     (define-key map (kbd "n") 'speed-type--play-next)
     map))
@@ -273,6 +286,147 @@ Accuracy is computed as (CORRECT-ENTRIES - CORRECTIONS) / TOTAL-ENTRIES."
           (+ errors corrections)
           speed-type-explaining-message))
 
+(defun speed-type-statistic-variables()
+  "If you change the structure here you must increment the variable SPEED-TYPE-FILE-FORMAT-VERSION."
+  (list (cons 'speed-type--title speed-type--title)
+	(cons 'speed-type--orig-text speed-type--orig-text)
+	(cons 'speed-type--remaining speed-type--remaining)
+	(cons 'speed-type--author speed-type--author)
+	(cons 'speed-type--lang speed-type--lang)
+	(cons 'speed-type--n-words speed-type--n-words)
+	(cons 'speed-type--add-extra-word-content-fn speed-type--add-extra-word-content-fn)
+	(cons 'speed-type--entries speed-type--entries)
+	(cons 'speed-type--errors speed-type--errors)
+	(cons 'speed-type--corrections speed-type--corrections)
+	(cons 'speed-type--elapsed-time (speed-type--elapsed-time))))
+
+
+(defcustom speed-type-max-num-records 10000
+  "Maximum number of saved records."
+  :group 'speed-type
+  :type '(natnum :tag "None negative number." ))
+
+(defvar speed-type-coding-system 'utf-8-unix
+  "The coding system Savehist uses for saving the minibuffer history.
+Changing this value while Emacs is running is supported, but considered
+unwise, unless you know what you are doing.")
+
+(defconst speed-type-file-format-version 0
+  "The current version of the format used by bookmark files.
+You should never need to change this.")
+
+(defun speed-type-maybe-upgrade-file-format ()
+  "Check the file-format version of current file.
+If the version is not up-to-date, upgrade it automatically.
+This expects to be called from `point-min' in a bookmark file."
+  (declare (obsolete nil "27.1"))
+  (let ((version
+         (with-suppressed-warnings
+             ((obsolete bookmark-grok-file-format-version))
+           (bookmark-grok-file-format-version))))
+    (cond
+     ((= version speed-type-file-format-version)
+      ) ; home free -- version is current
+     (t (error "Bookmark file format version strangeness")))))
+
+(defconst speed-type-end-of-version-stamp-marker
+  "-*- End Of Speed Type File Format Version Stamp -*-\n"
+  "This string marks the end of the version stamp in a bookmark file.")
+
+
+(defun speed-type-insert-file-format-version-stamp (coding)
+  "Insert text indicating current version of speed-type statistic file format.
+CODING is the symbol of the coding-system in which the file is encoded."
+  (if (memq (coding-system-base coding) '(undecided prefer-utf-8))
+      (setq coding 'utf-8-emacs))
+  (insert
+   (format
+    ";;;; Emacs Speed-type statisitic Format Version %d\
+;;;; -*- coding: %S; mode: lisp-data -*-\n"
+    speed-type-file-format-version (coding-system-base coding)))
+  (insert ";;; This format is meant to be slightly human-readable;\n"
+          ";;; nevertheless, you probably don't want to edit it.\n"
+          ";;; "
+          speed-type-end-of-version-stamp-marker))
+
+(defun speed-type--save-stats (file &optional alt-msg)
+  "Write stats of current speed-type session to FILE.
+
+Non-nil ALT-MSG is a message format string to use in place of the
+default, \"Saving bookmarks to file `%s'...\".  The string must
+contain a `%s' construct, so that it can be passed along with FILE to
+`format'.  At the end, \"done\" is appended to the message."
+  (let ((msg                      (or alt-msg  "Saving Statistics of current speed-type session to file `%s'..."))
+        (coding-system-for-write  speed-type-coding-system)
+        (print-length             nil)
+        (print-level              nil)
+        (existing-buf             (get-file-buffer file))
+        (emacs-lisp-mode-hook     nil) ; Avoid inserting automatic file header if existing empty file, so
+        (lisp-mode-hook           nil) ; better chance `speed-type-maybe-upgrade-file-format' signals error.
+	(speed-type-buffer (current-buffer))
+        bname fname last-fname start end)
+    (when (file-directory-p file) (error "`%s' is a directory, not a file" file))
+    (message msg (abbreviate-file-name file))
+    (with-current-buffer (let ((enable-local-variables ())) (find-file-noselect file))
+      (goto-char (point-min))
+      (if (file-exists-p file)
+          (speed-type-maybe-upgrade-file-format)
+	(delete-region (point-min) (point-max)) ; In case a find-file hook inserted a header, etc.
+	(unless (boundp 'speed-type-coding-system) ; Emacs < 25.2.
+	  (speed-type-insert-file-format-version-stamp))
+        (insert "(\n)"))
+      (setq start (and (file-exists-p file)
+                       (or (save-excursion (goto-char (point-min))
+                                           (search-forward (concat speed-type-end-of-version-stamp-marker "(")
+                                                           nil t))
+                           (error "Invalid speed-type-statisitic-file")))
+            end    (and start
+                        (or (save-excursion (goto-char start) (and (looking-at ")") start))
+                            (save-excursion (goto-char (point-max)) (re-search-backward "^)" nil t))
+                            (error "Invalid speed-type-statisitic-file"))))
+      (if (not start) ; New file, no header yet.
+          (goto-char 2)
+        ;;  Existing file - delete old entry unless max is not reached. Rolling.
+        (when (> (count-lines start end) speed-type-max-num-records)
+	  (save-excursion
+	    (goto-char start)
+	    (or (looking-at "(") (search-forward "(" nil t 1))
+	    (let ((bounds (bounds-of-thing-at-point 'sexp)))
+	      (kill-region (car bounds) (+ 1 (cdr bounds))))))
+        (goto-char (and start
+                        (or (save-excursion (goto-char start) (and (looking-at ")") start))
+                            (save-excursion (goto-char (point-max)) (re-search-backward "^)" nil t))
+                            (error "Invalid speed-type-statisitic-file")))))
+      (pp (with-current-buffer speed-type-buffer (speed-type-statistic-variables)) (current-buffer))
+      (when (boundp 'bookmark-file-coding-system) ; Emacs 25.2+.  See bug #25365
+        ;; Make sure specified encoding can encode the bookmarks.  If not, suggest utf-8-emacs as default.
+        (with-coding-priority '(utf-8-emacs)
+          (setq coding-system-for-write (select-safe-coding-system (point-min) (point-max)
+                                                                   (list t coding-system-for-write))))
+        (when start (delete-region 1 (1- start))) ; Delete old header.
+        (goto-char 1)
+        (speed-type-insert-file-format-version-stamp coding-system-for-write))
+      (let ((version-control (cl-case bookmark-version-control
+                               ((nil) nil)
+                               (never 'never)
+                               (nospecial version-control)
+                               (t t)))
+            (require-final-newline t)
+            (errorp nil))
+        (condition-case nil
+            (write-file file)
+          (file-error (setq errorp  t)
+                      ;; Do NOT raise error.  (Need to be able to exit.)
+                      (let ((msg  (format "CANNOT WRITE FILE `%s'" file)))
+                        (if (fboundp 'display-warning)
+                            (display-warning 'speed-type msg)
+                          (message msg)
+                          (sit-for 4)))))
+        (when (boundp 'speed-type-coding-system) ; Emacs 25.2+
+          (setq speed-type-coding-system  coding-system-for-write))
+        (unless existing-buf (kill-buffer (current-buffer)))
+        (unless errorp (message (concat msg "done") file))))))
+
 (defun speed-type--gb-url (book-num)
   "Return url for BOOK-NUM."
   (format speed-type--gb-url-format book-num book-num))
@@ -340,9 +494,23 @@ Accuracy is computed as (CORRECT-ENTRIES - CORRECTIONS) / TOTAL-ENTRIES."
                             (cl-incf speed-type--corrections))))
       (store-substring speed-type--mod-str pos 0))))
 
+(defun speed-type--save-stats-when-customized ()
+  "Check the custom variable SPEED-TYPE-SAVE-STATISTIC-OPTION and save stats."
+  (when (not (eq speed-type-save-statistic-option 'never))
+    (when (if (eq speed-type-save-statistic-option 'ask)
+	       (y-or-n-p "Save statistic?")
+	     t)
+      (speed-type--save-stats speed-type-statistic-filename))))
+
+(defun speed-type--quit ()
+  (interactive)
+  (speed-type--save-stats-when-customized)
+  (kill-current-buffer))
+
 (defun speed-type--replay ()
   "Replay a speed-type session."
   (interactive)
+  (speed-type--save-stats-when-customized)
   (when speed-type--replay-fn
     (let ((fn speed-type--replay-fn)
 	  (cb (current-buffer)))
