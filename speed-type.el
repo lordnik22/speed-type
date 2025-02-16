@@ -1051,7 +1051,7 @@ LIMIT is supplied to the random-function."
 		 (while (< (buffer-size) char-length)
 		   (insert (speed-type--get-random-word buf n))
                    (insert " "))
-		 (fill-region (point-min) (point-max) 'none t)
+		 (fill-region (point-min) (point-max))
 		 (if speed-type-wordlist-transform
                      (funcall speed-type-wordlist-transform (buffer-string))
                    (buffer-string))))
