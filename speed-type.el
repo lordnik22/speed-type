@@ -934,7 +934,6 @@ been completed."
        (with-current-buffer speed-type--content-buffer font-lock-defaults)
        speed-type--go-next-fn)
     (speed-type--setup speed-type--content-buffer
-	     speed-type--title
 	     speed-type--orig-text
 	     :lang speed-type--lang
 	     :author speed-type--author
