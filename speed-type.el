@@ -873,7 +873,7 @@ to (point-min) and (point-max)"
       (setq continue (re-search-backward (sentence-end) (mark) t))
       (when continue (setq fwd t)))
     (when fwd (forward-char)))
-  (unless (derived-mode-p 'prog-mode) (fill-region (region-beginning) (region-end) 'none t))
+  (unless (derived-mode-p 'prog-mode) (fill-region (point-min) (point-max) 'none t))
   (buffer-substring-no-properties (region-beginning) (region-end)))
 
 (defun speed-type--setup-code
@@ -997,9 +997,10 @@ LIMIT is supplied to the random-function."
       (when speed-type--extra-words-animation-time (cancel-timer speed-type--extra-words-animation-time))
       (setq speed-type--extra-words-animation-time nil)
       (when speed-type--extra-words-queue
-	(insert (mapconcat 'identity speed-type--extra-words-queue))
-	(unless (with-current-buffer speed-type--content-buffer (derived-mode-p 'prog-mode)
-				     (fill-region (point-min) (point-max) 'none t)))
+	(goto-char (point-max))
+	(insert (mapconcat 'identity speed-type--extra-words-queue ""))
+	(unless (with-current-buffer speed-type--content-buffer (derived-mode-p 'prog-mode))
+	  (fill-region (point-min) (point-max) 'none t))
 	(setq speed-type--extra-words-queue nil)))))
 
 (defun speed-type-animate-extra-word-inseration (buf)
@@ -1111,12 +1112,9 @@ will be used.  Else some text will be picked randomly."
   (if full
       (speed-type-region (point-min) (point-max))
     (let* ((buf (speed-type-prepare-content-buffer-from-buffer (current-buffer)))
-           (text (with-current-buffer buf
-		   (speed-type--pick-text-to-type)))
+           (text (with-current-buffer buf (speed-type--pick-text-to-type)))
 	   (line-count (with-current-buffer buf (count-lines (point-min) (point-max))))
-           (go-next-fn (lambda ()
-                         (with-current-buffer buf
-                           (speed-type-buffer nil)))))
+           (go-next-fn (lambda () (with-current-buffer buf (speed-type-buffer full)))))
       (if (with-current-buffer buf
 	    (derived-mode-p 'prog-mode))
           (speed-type--code-with-highlighting buf
@@ -1131,6 +1129,7 @@ will be used.  Else some text will be picked randomly."
 		 :author (user-full-name)
 		 :title (buffer-name)
 		 :add-extra-word-content-fn (lambda () (speed-type--get-separated-thing-at-random-line buf line-count " "))
+		 :replay-fn #'speed-type--get-replay-fn
 		 :go-next-fn go-next-fn)))))
 
 ;;;###autoload
