@@ -133,6 +133,10 @@ be complete when these extra words are typed too."
   :group 'speed-type
   :type 'string)
 
+(defcustom speed-type-max-num-records 10000
+  "Maximum number of saved records."
+  :group 'speed-type
+  :type '(natnum :tag "None negative number." ))
 
 (defface speed-type-default
   '()
@@ -171,6 +175,20 @@ Total chars:  %d
 Corrections:  %d
 Total errors: %d
 %s")
+
+(defvar speed-type-previous-saved-stats-format  "\n
+Num of records:      %d
+Median Skill:        %s
+Median Net WPM:      %d
+Median Net CPM:      %d
+Median Gross WPM:    %d
+Median Gross CPM:    %d
+Median Accuracy:     %.2f%%
+Median Total time:   %d
+Median Total chars:  %d
+Median Corrections:  %d
+Median Total errors: %d
+Median Remaining:    %d")
 
 (defvar speed-type--completed-keymap
   (let ((map (make-sparse-keymap)))
@@ -273,20 +291,14 @@ Accuracy is computed as (CORRECT-ENTRIES - CORRECTIONS) / TOTAL-ENTRIES."
         ((< wpm 80) "Master")
         (t          "Racer")))
 
-(defun speed-type--generate-stats (entries errors corrections seconds)
-  "Return string of statistics."
-  (format speed-type-stats-format
-          (speed-type--skill (speed-type--net-wpm entries errors seconds))
-          (speed-type--net-wpm entries errors seconds)
-          (speed-type--net-cpm entries errors seconds)
-          (speed-type--gross-wpm entries seconds)
-          (speed-type--gross-cpm entries seconds)
-          (speed-type--accuracy entries (- entries errors) corrections)
-          (format-seconds "%M %z%S" seconds)
-          entries
-          corrections
-          (+ errors corrections)
-          speed-type-explaining-message))
+(defvar speed-type-coding-system 'utf-8-unix
+  "The coding system Savehist uses for saving the minibuffer history.
+Changing this value while Emacs is running is supported, but considered
+unwise, unless you know what you are doing.")
+
+(defconst speed-type-file-format-version 0
+  "The current version of the format used by bookmark files.
+You should never need to change this.")
 
 (defun speed-type-statistic-variables ()
   "If you change the structure here you must increment the variable SPEED-TYPE-FILE-FORMAT-VERSION and define a migration in SPEED-TYPE-MAYBE-UPGRADE-FILE-FORMAT."
@@ -309,20 +321,6 @@ Accuracy is computed as (CORRECT-ENTRIES - CORRECTIONS) / TOTAL-ENTRIES."
 	  (cons 'speed-type--net-wpm (speed-type--net-wpm entries errors seconds))
 	  (cons 'speed-type--net-cpm (speed-type--net-cpm entries errors seconds))
 	  (cons 'speed-type--accuracy (speed-type--accuracy entries (- entries errors) corrections)))))
-
-(defcustom speed-type-max-num-records 10000
-  "Maximum number of saved records."
-  :group 'speed-type
-  :type '(natnum :tag "None negative number." ))
-
-(defvar speed-type-coding-system 'utf-8-unix
-  "The coding system Savehist uses for saving the minibuffer history.
-Changing this value while Emacs is running is supported, but considered
-unwise, unless you know what you are doing.")
-
-(defconst speed-type-file-format-version 0
-  "The current version of the format used by bookmark files.
-You should never need to change this.")
 
 (defun speed-type-maybe-upgrade-file-format ()
   "Check the file-format version of current file.
@@ -358,7 +356,13 @@ CODING is the symbol of the coding-system in which the file is encoded."
           ";;; "
           speed-type-end-of-version-stamp-marker))
 
-(defun speed-type--save-stats (file &optional alt-msg)
+(defun speed-type-save-stats-when-customized ()
+  "Check the custom variable SPEED-TYPE-SAVE-STATISTIC-OPTION and save stats."
+  (when (not (eq speed-type-save-statistic-option 'never))
+    (when (if (eq speed-type-save-statistic-option 'ask) (y-or-n-p "Save statistic?") t)
+      (speed-type-save-stats speed-type-statistic-filename))))
+
+(defun speed-type-save-stats (file &optional alt-msg)
   "Write stats of current speed-type session to FILE.
 
 Non-nil ALT-MSG is a message format string to use in place of the
@@ -478,31 +482,7 @@ Point is irrelevant and unaffected."
      (speed-type--calc-median 'speed-type--errors stats)
      (speed-type--calc-median 'speed-type--remaining stats))))
 
-(defvar speed-type-previous-saved-stats-format  "\n
-Num of records:      %d
-Median Skill:        %s
-Median Net WPM:      %d
-Median Net CPM:      %d
-Median Gross WPM:    %d
-Median Gross CPM:    %d
-Median Accuracy:     %.2f%%
-Median Total time:   %d
-Median Total chars:  %d
-Median Corrections:  %d
-Median Total errors: %d
-Median Remaining:    %d")
-
-(defun speed-type--display-statistic ()
-  "Display median values"
-  (interactive)
-  (with-current-buffer speed-type--buffer
-    (goto-char (point-max))
-    (read-only-mode -1)
-    (insert (apply 'format speed-type-previous-saved-stats-format (speed-type--calc-stats (speed-type--load-last-stats speed-type-statistic-filename))))
-    (read-only-mode)
-    (speed-type--display-menu)))
-
-(defun speed-type--display-menu ()
+(defun speed-type-display-menu ()
   "Display and set controls the user can make in this speed-type session.
 leave buffer in read-only mode."
   (read-only-mode -1)
@@ -525,7 +505,7 @@ leave buffer in read-only mode."
     (read-only-mode))
   (use-local-map speed-type--completed-keymap))
 
-(defun speed-type--load-last-stats (file)
+(defun speed-type-load-last-stats (file)
   "Load bookmarks from FILE (which must be in the standard format).
 Return the list of bookmarks read from FILE.
 Without a prefix argument (argument OVERWRITE is nil), add the newly
@@ -621,13 +601,15 @@ speed-type files that were created using the speed-type functions."
                             (cl-incf speed-type--corrections))))
       (store-substring speed-type--mod-str pos 0))))
 
-(defun speed-type--save-stats-when-customized ()
-  "Check the custom variable SPEED-TYPE-SAVE-STATISTIC-OPTION and save stats."
-  (when (not (eq speed-type-save-statistic-option 'never))
-    (when (if (eq speed-type-save-statistic-option 'ask)
-	       (y-or-n-p "Save statistic?")
-	     t)
-      (speed-type--save-stats speed-type-statistic-filename))))
+(defun speed-type--display-statistic ()
+  "Display median values from current and past entries."
+  (interactive)
+  (with-current-buffer speed-type--buffer
+    (goto-char (point-max))
+    (read-only-mode -1)
+    (insert (apply 'format speed-type-previous-saved-stats-format (speed-type--calc-stats (speed-type-load-last-stats speed-type-statistic-filename))))
+    (read-only-mode)
+    (speed-type--display-menu)))
 
 (defun speed-type--quit ()
   (interactive)
@@ -656,6 +638,21 @@ speed-type files that were created using the speed-type functions."
   (interactive)
   (message "Fill paragraph not available"))
 
+(defun speed-type-generate-stats (entries errors corrections seconds)
+  "Return string of statistics."
+  (format speed-type-stats-format
+          (speed-type--skill (speed-type--net-wpm entries errors seconds))
+          (speed-type--net-wpm entries errors seconds)
+          (speed-type--net-cpm entries errors seconds)
+          (speed-type--gross-wpm entries seconds)
+          (speed-type--gross-cpm entries seconds)
+          (speed-type--accuracy entries (- entries errors) corrections)
+          (format-seconds "%M %z%S" seconds)
+          entries
+          corrections
+          (+ errors corrections)
+          speed-type-explaining-message))
+
 (defun speed-type-complete ()
   "Remove typing hooks from the buffer and print statistics."
   (interactive)
@@ -672,13 +669,13 @@ speed-type files that were created using the speed-type functions."
 	  (insert (propertize
 		   (format ", by %s" speed-type--author)
 		   'face 'italic)))
-	(insert (speed-type--generate-stats
+	(insert (speed-type-generate-stats
 		 speed-type--entries
 		 speed-type--errors
 		 speed-type--corrections
 		 (speed-type--elapsed-time)))
-	(speed-type--save-stats-when-customized)
-	(speed-type--display-menu)))))
+	(speed-type-save-stats-when-customized)
+	(speed-type-display-menu)))))
 
 (defun speed-type--diff (orig new start end)
   "Update stats and buffer contents with result of changes in text."
