@@ -300,7 +300,6 @@ Accuracy is computed as (CORRECT-ENTRIES - CORRECTIONS) / TOTAL-ENTRIES."
 	  (cons 'speed-type--author speed-type--author)
 	  (cons 'speed-type--lang speed-type--lang)
 	  (cons 'speed-type--n-words speed-type--n-words)
-	  (cons 'speed-type--add-extra-word-content-fn speed-type--add-extra-word-content-fn)
 	  (cons 'speed-type--entries entries)
 	  (cons 'speed-type--errors errors)
 	  (cons 'speed-type--corrections corrections)
@@ -456,15 +455,14 @@ Point is irrelevant and unaffected."
   (let* ((numbers (-sort #'< (mapcar (lambda (e) (cdr (assoc symbol e))) stats)))
 	 (num-of-records (length numbers))
 	 (medians (if (eq (% num-of-records 2) 0)
-		      (/ (+ (nth (/ num-of-records 2) numbers)
-			    (nth (+ 1 (/ num-of-records 2)) numbers))
+		      (/ (+ (nth (- 1 (/ num-of-records 2)) numbers)
+			    (nth (/ num-of-records 2) numbers))
 			 2)
-		    (nth (/ num-of-records 1 2) numbers))))
+		    (nth (- 1 (/ num-of-records 2)) numbers))))
     medians))
 
 (defun speed-type--calc-stats (stats)
   "Calculate important statiscal values with a read stats list"
-  (setq stats (speed-type--load-last-stats speed-type-statistic-filename))
   (let ((median-gross-wpm (speed-type--calc-median 'speed-type--gross-wpm stats)))
     (list
      (length stats)
