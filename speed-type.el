@@ -666,7 +666,7 @@ speed-type files that were created using the speed-type functions."
 		   (format ", by %s" speed-type--author)
 		   'face 'italic)))
 	(insert (speed-type-generate-stats
-		 (- speed-type--entries speed-type--remaining)
+		 speed-type--entries
 		 speed-type--errors
 		 speed-type--corrections
 		 (speed-type--elapsed-time)))
