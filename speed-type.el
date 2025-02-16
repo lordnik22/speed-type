@@ -297,11 +297,15 @@ Changing this value while Emacs is running is supported, but considered
 unwise, unless you know what you are doing.")
 
 (defconst speed-type-file-format-version 0
-  "The current version of the format used by bookmark files.
+  "The current version of the format used by speed-type statistic files.
 You should never need to change this.")
 
 (defun speed-type-statistic-variables ()
-  "If you change the structure here you must increment the variable SPEED-TYPE-FILE-FORMAT-VERSION and define a migration in SPEED-TYPE-MAYBE-UPGRADE-FILE-FORMAT."
+  "Define the structure of raw-data used for calculating the median-stats.
+
+If the structure is changed, SPEED-TYPE-FILE-FORMAT-VERSION must
+be incremented and a migration must be coded in
+SPEED-TYPE-MAYBE-UPGRADE-FILE-FORMAT."
   (let ((entries speed-type--entries)
 	(errors speed-type--errors)
 	(corrections speed-type--corrections)
@@ -325,21 +329,20 @@ You should never need to change this.")
 (defun speed-type-maybe-upgrade-file-format ()
   "Check the file-format version of current file.
 If the version is not up-to-date, upgrade it automatically.
-This expects to be called from `point-min' in a bookmark file."
+This expects to be called from `point-min' in a speed-type statistic file."
   (declare (obsolete nil "27.1"))
   (let ((version
          (with-suppressed-warnings
-             ((obsolete bookmark-grok-file-format-version))
+             ((obsolete bookmark-grok-file-format-version)) ;; we use the same mechanism as bookmark file
            (bookmark-grok-file-format-version))))
     (cond
      ((= version speed-type-file-format-version)
       ) ; home free -- version is current
-     (t (error "Bookmark file format version strangeness")))))
+     (t (error "Speed-type statistic file format version strangeness")))))
 
 (defconst speed-type-end-of-version-stamp-marker
   "-*- End Of Speed Type File Format Version Stamp -*-\n"
-  "This string marks the end of the version stamp in a bookmark file.")
-
+  "This string marks the end of the version stamp in a speed-type statistic file.")
 
 (defun speed-type-insert-file-format-version-stamp (coding)
   "Insert text indicating current version of speed-type statistic file format.
@@ -366,10 +369,11 @@ CODING is the symbol of the coding-system in which the file is encoded."
   "Write stats of current speed-type session to FILE.
 
 Non-nil ALT-MSG is a message format string to use in place of the
-default, \"Saving bookmarks to file `%s'...\".  The string must
-contain a `%s' construct, so that it can be passed along with FILE to
-`format'.  At the end, \"done\" is appended to the message."
-  (let ((msg                      (or alt-msg  "Saving Statistics of current speed-type session to file `%s'..."))
+default, \"Saving statistics of current speed-type session to
+file `%s'...\". The string must contain a `%s' construct, so that
+it can be passed along with FILE to `format'. At the end,
+\"done\" is appended to the message."
+  (let ((msg                      (or alt-msg  "Saving statistics of current speed-type session to file `%s'..."))
         (coding-system-for-write  speed-type-coding-system)
         (print-length             nil)
         (print-level              nil)
@@ -411,20 +415,15 @@ contain a `%s' construct, so that it can be passed along with FILE to
                             (save-excursion (goto-char (point-max)) (re-search-backward "^)" nil t))
                             (error "Invalid speed-type-statisitic-file")))))
       (pp (with-current-buffer speed-type-buffer (speed-type-statistic-variables)) (current-buffer))
-      (when (boundp 'bookmark-file-coding-system) ; Emacs 25.2+.  See bug #25365
-        ;; Make sure specified encoding can encode the bookmarks.  If not, suggest utf-8-emacs as default.
+      (when (boundp 'speed-type-coding-system) ; Emacs 25.2+.  See bug #25365
+        ;; Make sure specified encoding can encode the speed-type stats.  If not, suggest utf-8-emacs as default.
         (with-coding-priority '(utf-8-emacs)
           (setq coding-system-for-write (select-safe-coding-system (point-min) (point-max)
                                                                    (list t coding-system-for-write))))
         (when start (delete-region 1 (1- start))) ; Delete old header.
         (goto-char 1)
         (speed-type-insert-file-format-version-stamp coding-system-for-write))
-      (let ((version-control (cl-case bookmark-version-control
-                               ((nil) nil)
-                               (never 'never)
-                               (nospecial version-control)
-                               (t t)))
-            (require-final-newline t)
+      (let ((require-final-newline t)
             (errorp nil))
         (condition-case nil
             (write-file file)
@@ -448,14 +447,14 @@ Point is irrelevant and unaffected."
                 (if (search-forward speed-type-end-of-version-stamp-marker nil t)
                     (condition-case err
                         (read (current-buffer))
-                      (error (error "Cannot read definitions in bookmark file:  %s"
+                      (error (error "Cannot read definitions in speed type statistic file:  %s"
                                     (error-message-string err))))
                    ;; Else we're dealing with format version 0
-		  (error "Buffer is not in bookmark-list format")))))
+		  (error "Buffer is not in speed-type statistic format")))))
       stats))
 
 (defun speed-type--calc-median (symbol stats)
-  "Calculate the median of given symbol in stats."
+  "Calculate the median of given SYMBOL in STATS."
   (let* ((numbers (-sort #'< (mapcar (lambda (e) (cdr (assoc symbol e))) stats)))
 	 (num-of-records (length numbers))
 	 (medians (if (eq (% num-of-records 2) 0)
@@ -466,7 +465,7 @@ Point is irrelevant and unaffected."
     medians))
 
 (defun speed-type--calc-stats (stats)
-  "Calculate important statiscal values with a read stats list"
+  "Calculate the median of each numerical value in STATS. Additional provde length and skill-alue."
   (let ((median-gross-wpm (speed-type--calc-median 'speed-type--gross-wpm stats)))
     (list
      (length stats)
@@ -506,11 +505,8 @@ leave buffer in read-only mode."
   (use-local-map speed-type--completed-keymap))
 
 (defun speed-type-load-last-stats (file)
-  "Load bookmarks from FILE (which must be in the standard format).
-Return the list of bookmarks read from FILE.
-Without a prefix argument (argument OVERWRITE is nil), add the newly
-loaded bookmarks to those already current.  They are saved to the
-current bookmark file when bookmarks are saved.
+  "Load speed-type stats from FILE (which must be in the standard format).
+Return the list of stats read from FILE.
 
 If you use `speed-type--load-stats' to load a file that does not contain a
 proper speed-type stats list, then when speed-type stats are saved the current
@@ -670,7 +666,7 @@ speed-type files that were created using the speed-type functions."
 		   (format ", by %s" speed-type--author)
 		   'face 'italic)))
 	(insert (speed-type-generate-stats
-		 speed-type--entries
+		 (- speed-type--entries speed-type--remaining)
 		 speed-type--errors
 		 speed-type--corrections
 		 (speed-type--elapsed-time)))
